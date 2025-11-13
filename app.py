@@ -3,7 +3,6 @@ import streamlit as st
 import datetime
 import json
 import os
-from datetime import timezone
 
 # Page configuration with better theme
 st.set_page_config(
@@ -98,18 +97,23 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def get_current_time():
-    """Get current time in proper format"""
+    """Get current local time in proper format"""
     now = datetime.datetime.now()
     return now.strftime("%I:%M %p")
 
-def get_current_date():
-    """Get current date with time"""
+def get_current_datetime():
+    """Get current date and time"""
     now = datetime.datetime.now()
     return now.strftime("%Y-%m-%d %H:%M:%S")
 
 def get_current_timestamp():
     """Get timestamp for sorting"""
     return datetime.datetime.now().isoformat()
+
+def get_current_date_display():
+    """Get current date for display"""
+    now = datetime.datetime.now()
+    return now.strftime("%B %d, %Y")
 
 def load_database():
     """Load the shared database from file"""
@@ -174,8 +178,8 @@ def login_section():
                 if new_username not in db['users']:
                     # Register new user
                     db['users'][new_username] = {
-                        "created_at": get_current_date(),
-                        "last_login": get_current_date()
+                        "created_at": get_current_datetime(),
+                        "last_login": get_current_datetime()
                     }
                     # Initialize contacts list for new user
                     db['contacts'][new_username] = []
@@ -276,11 +280,12 @@ def chat_section():
     
     db = load_database()
     
-    # Chat header
+    # Chat header with current time
+    current_time = get_current_time()
     st.markdown(f"""
     <div class='chat-header'>
         <h3>💬 Chat with {st.session_state.current_contact}</h3>
-        <p>Last seen: {get_current_time()}</p>
+        <p>Last seen: {current_time}</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -316,7 +321,7 @@ def chat_section():
             "sender": st.session_state.current_user,
             "receiver": st.session_state.current_contact,
             "content": text_input,
-            "time": get_current_time(),
+            "time": get_current_time(),  # Current time when message is sent
             "timestamp": get_current_timestamp()
         }
         db['messages'].append(new_message)
@@ -336,7 +341,7 @@ def info_section():
     st.markdown(f'<div class="app-info-text">💬 Your Contacts: {len(db["contacts"].get(st.session_state.current_user, []))}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="app-info-text">📨 Total Messages: {len(db["messages"])}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="app-info-text">🕐 Current Time: {get_current_time()}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="app-info-text">📅 Today\'s Date: {datetime.datetime.now().strftime("%B %d, %Y")}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="app-info-text">📅 Today\'s Date: {get_current_date_display()}</div>', unsafe_allow_html=True)
     
     # Show all registered users
     st.markdown("---")
@@ -356,7 +361,9 @@ def main():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("<h1 style='text-align: center; color: #075E54;'>💬 WhatsApp Web Clone</h1>", unsafe_allow_html=True)
-        st.markdown(f'<p style="text-align: center; color: #000000; font-weight: bold;">🕐 {get_current_time()} | 📅 {datetime.datetime.now().strftime("%B %d, %Y")}</p>', unsafe_allow_html=True)
+        current_time = get_current_time()
+        current_date = get_current_date_display()
+        st.markdown(f'<p style="text-align: center; color: #000000; font-weight: bold;">🕐 {current_time} | 📅 {current_date}</p>', unsafe_allow_html=True)
     
     # Initialize user session
     initialize_session()
