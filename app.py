@@ -16,7 +16,7 @@ st.set_page_config(
 # Database file path
 DB_FILE = "chat_database.json"
 
-# Custom CSS for better UI colors
+# Custom CSS for better UI colors with bold black text
 st.markdown("""
 <style>
     .main {
@@ -65,6 +65,13 @@ st.markdown("""
         font-weight: bold;
         color: #128C7E;
         margin-bottom: 5px;
+        font-size: 14px;
+    }
+    .message-text {
+        font-weight: bold;
+        color: #000000;
+        font-size: 15px;
+        line-height: 1.4;
     }
     .message-time {
         font-size: 0.7rem;
@@ -79,16 +86,30 @@ st.markdown("""
         margin: 10px 0;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
+    .user-list {
+        font-weight: bold;
+        color: #000000;
+    }
+    .app-info-text {
+        font-weight: bold;
+        color: #000000;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 def get_current_time():
     """Get current time in proper format"""
-    return datetime.datetime.now(timezone.utc).strftime("%I:%M %p")
+    now = datetime.datetime.now()
+    return now.strftime("%I:%M %p")
 
 def get_current_date():
-    """Get current date"""
-    return datetime.datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    """Get current date with time"""
+    now = datetime.datetime.now()
+    return now.strftime("%Y-%m-%d %H:%M:%S")
+
+def get_current_timestamp():
+    """Get timestamp for sorting"""
+    return datetime.datetime.now().isoformat()
 
 def load_database():
     """Load the shared database from file"""
@@ -222,7 +243,7 @@ def contacts_section():
     st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
 def display_message(message):
-    """Display a chat message"""
+    """Display a chat message with bold black text"""
     is_current_user = message["sender"] == st.session_state.current_user
     
     if message["type"] == "text":
@@ -230,7 +251,7 @@ def display_message(message):
             st.markdown(f"""
             <div class='user-message'>
                 <div class='message-sender'>You</div>
-                <div>{message["content"]}</div>
+                <div class='message-text'>{message["content"]}</div>
                 <div class='message-time'>{message["time"]}</div>
             </div>
             """, unsafe_allow_html=True)
@@ -238,7 +259,7 @@ def display_message(message):
             st.markdown(f"""
             <div class='contact-message'>
                 <div class='message-sender'>{message["sender"]}</div>
-                <div>{message["content"]}</div>
+                <div class='message-text'>{message["content"]}</div>
                 <div class='message-time'>{message["time"]}</div>
             </div>
             """, unsafe_allow_html=True)
@@ -296,7 +317,7 @@ def chat_section():
             "receiver": st.session_state.current_contact,
             "content": text_input,
             "time": get_current_time(),
-            "timestamp": get_current_date()
+            "timestamp": get_current_timestamp()
         }
         db['messages'].append(new_message)
         if save_database(db):
@@ -311,22 +332,23 @@ def info_section():
     
     db = load_database()
     
-    st.sidebar.write(f"**👤 Total Users:** {len(db['users'])}")
-    st.sidebar.write(f"**💬 Your Contacts:** {len(db['contacts'].get(st.session_state.current_user, []))}")
-    st.sidebar.write(f"**📨 Total Messages:** {len(db['messages'])}")
-    st.sidebar.write(f"**🕐 Current Time:** {get_current_time()}")
+    st.markdown(f'<div class="app-info-text">👤 Total Users: {len(db["users"])}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="app-info-text">💬 Your Contacts: {len(db["contacts"].get(st.session_state.current_user, []))}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="app-info-text">📨 Total Messages: {len(db["messages"])}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="app-info-text">🕐 Current Time: {get_current_time()}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="app-info-text">📅 Today\'s Date: {datetime.datetime.now().strftime("%B %d, %Y")}</div>', unsafe_allow_html=True)
     
     # Show all registered users
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("👥 All Users")
+    st.markdown("---")
+    st.subheader("👥 All Users")
     if db['users']:
         for user in sorted(db['users'].keys()):
             if user == st.session_state.current_user:
-                st.sidebar.write(f"✅ **{user}** (You)")
+                st.markdown(f'<div class="user-list">✅ {user} (You)</div>', unsafe_allow_html=True)
             else:
-                st.sidebar.write(f"👤 {user}")
+                st.markdown(f'<div class="user-list">👤 {user}</div>', unsafe_allow_html=True)
     else:
-        st.sidebar.write("No users registered yet")
+        st.markdown('<div class="user-list">No users registered yet</div>', unsafe_allow_html=True)
     st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
 def main():
@@ -334,6 +356,7 @@ def main():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("<h1 style='text-align: center; color: #075E54;'>💬 WhatsApp Web Clone</h1>", unsafe_allow_html=True)
+        st.markdown(f'<p style="text-align: center; color: #000000; font-weight: bold;">🕐 {get_current_time()} | 📅 {datetime.datetime.now().strftime("%B %d, %Y")}</p>', unsafe_allow_html=True)
     
     # Initialize user session
     initialize_session()
