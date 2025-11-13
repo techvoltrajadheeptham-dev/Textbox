@@ -4,6 +4,7 @@ import datetime
 import base64
 import io
 import json
+import os
 from PIL import Image
 
 # Page configuration
@@ -13,35 +14,48 @@ st.set_page_config(
     layout="wide"
 )
 
-# Initialize shared data in session state
-if 'shared_data' not in st.session_state:
-    st.session_state.shared_data = {
-        'users': {},
-        'messages': [],
-        'contacts': {}
+# Database file path
+DB_FILE = "chat_database.json"
+
+def load_database():
+    """Load the shared database from file"""
+    try:
+        if os.path.exists(DB_FILE):
+            with open(DB_FILE, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        st.error(f"Error loading database: {e}")
+    
+    # Return empty database structure
+    return {
+        "users": {},
+        "messages": [],
+        "contacts": {}
     }
 
-def initialize_user():
-    """Initialize user-specific session state"""
+def save_database(data):
+    """Save the shared database to file"""
+    try:
+        with open(DB_FILE, 'w') as f:
+            json.dump(data, f)
+        return True
+    except Exception as e:
+        st.error(f"Error saving database: {e}")
+        return False
+
+def initialize_session():
+    """Initialize user session"""
     if 'current_user' not in st.session_state:
         st.session_state.current_user = None
         st.session_state.current_contact = None
         st.session_state.uploaded_files = {}
 
-def get_shared_data():
-    """Get the shared data that works across all sessions"""
-    return st.session_state.shared_data
-
-def save_shared_data():
-    """Save to shared data (in production, this would be a database)"""
-    # In Streamlit Cloud, this persists during the app's lifetime
-    pass
-
 def login_section():
     """User login/registration"""
     st.sidebar.header("🔐 Login / Register")
     
-    shared_data = get_shared_data()
+    # Load current database
+    db = load_database()
     
     tab1, tab2 = st.sidebar.tabs(["Login", "Register"])
     
@@ -49,11 +63,12 @@ def login_section():
         username = st.text_input("Username", key="login_username").strip()
         if st.button("Login", key="login_btn", use_container_width=True):
             if username:
-                if username in shared_data['users']:
+                if username in db['users']:
                     st.session_state.current_user = username
                     # Initialize user contacts if not exists
-                    if username not in shared_data['contacts']:
-                        shared_data['contacts'][username] = []
+                    if username not in db['contacts']:
+                        db['contacts'][username] = []
+                        save_database(db)
                     st.rerun()
                 else:
                     st.error("User not found! Please register first.")
@@ -62,18 +77,22 @@ def login_section():
         new_username = st.text_input("Choose Username", key="register_username").strip()
         if st.button("Register", key="register_btn", use_container_width=True):
             if new_username:
-                if new_username not in shared_data['users']:
+                if new_username not in db['users']:
                     # Register new user
-                    shared_data['users'][new_username] = {
-                        "created_at": datetime.datetime.now().isoformat()
+                    db['users'][new_username] = {
+                        "created_at": datetime.datetime.now().isoformat(),
+                        "last_login": datetime.datetime.now().isoformat()
                     }
                     # Initialize contacts list for new user
-                    shared_data['contacts'][new_username] = []
+                    db['contacts'][new_username] = []
                     
-                    st.session_state.current_user = new_username
-                    st.success(f"Welcome {new_username}! You can now add contacts.")
-                    save_shared_data()
-                    st.rerun()
+                    # Save to database
+                    if save_database(db):
+                        st.session_state.current_user = new_username
+                        st.success(f"🎉 Welcome {new_username}! You can now add contacts.")
+                        st.rerun()
+                    else:
+                        st.error("Failed to save user registration.")
                 else:
                     st.error("Username already exists!")
             else:
@@ -83,24 +102,26 @@ def contacts_section():
     """Manage contacts"""
     st.sidebar.header("👥 Contacts")
     
-    shared_data = get_shared_data()
     current_user = st.session_state.current_user
+    db = load_database()
     
     # Add contact section
     st.sidebar.subheader("Add Contact")
     new_contact = st.sidebar.text_input("Enter username:").strip()
     
-    if st.sidebar.button("Add Contact", use_container_width=True):
+    if st.sidebar.button("Add Contact", use_container_width=True, type="primary"):
         if new_contact:
             if new_contact == current_user:
-                st.sidebar.error("You cannot add yourself!")
-            elif new_contact in shared_data['users']:
+                st.sidebar.error("❌ You cannot add yourself!")
+            elif new_contact in db['users']:
                 # Add to current user's contacts
-                if new_contact not in shared_data['contacts'][current_user]:
-                    shared_data['contacts'][current_user].append(new_contact)
-                    st.sidebar.success(f"✅ Added {new_contact} to contacts!")
-                    save_shared_data()
-                    st.rerun()
+                if new_contact not in db['contacts'][current_user]:
+                    db['contacts'][current_user].append(new_contact)
+                    if save_database(db):
+                        st.sidebar.success(f"✅ Added {new_contact} to contacts!")
+                        st.rerun()
+                    else:
+                        st.sidebar.error("❌ Failed to save contact.")
                 else:
                     st.sidebar.error("❌ Already in contacts!")
             else:
@@ -110,7 +131,7 @@ def contacts_section():
     
     # Display contacts
     st.sidebar.subheader("Your Contacts")
-    user_contacts = shared_data['contacts'].get(current_user, [])
+    user_contacts = db['contacts'].get(current_user, [])
     
     if not user_contacts:
         st.sidebar.info("No contacts yet. Add someone to chat!")
@@ -172,7 +193,7 @@ def chat_section():
         st.info("👈 Select a contact from the sidebar to start chatting!")
         return
     
-    shared_data = get_shared_data()
+    db = load_database()
     
     st.header(f"💬 Chat with {st.session_state.current_contact}")
     
@@ -181,22 +202,26 @@ def chat_section():
     with chat_container:
         # Get messages between current user and contact
         chat_messages = [
-            msg for msg in shared_data['messages']
+            msg for msg in db['messages']
             if (msg["sender"] == st.session_state.current_user and msg["receiver"] == st.session_state.current_contact) or
                (msg["sender"] == st.session_state.current_contact and msg["receiver"] == st.session_state.current_user)
         ]
         
         # Sort by timestamp
-        chat_messages.sort(key=lambda x: x["timestamp"])
+        chat_messages.sort(key=lambda x: x.get("timestamp", ""))
         
         for message in chat_messages:
             display_message(message)
+        
+        if not chat_messages:
+            st.info("No messages yet. Start the conversation!")
     
     st.markdown("---")
     
     # Text input
     text_input = st.chat_input(f"Message {st.session_state.current_contact}...")
     if text_input:
+        db = load_database()  # Reload to get latest messages
         new_message = {
             "type": "text",
             "sender": st.session_state.current_user,
@@ -205,9 +230,11 @@ def chat_section():
             "time": datetime.datetime.now().strftime("%H:%M"),
             "timestamp": datetime.datetime.now().isoformat()
         }
-        shared_data['messages'].append(new_message)
-        save_shared_data()
-        st.rerun()
+        db['messages'].append(new_message)
+        if save_database(db):
+            st.rerun()
+        else:
+            st.error("Failed to send message")
     
     # Image upload
     st.subheader("📷 Share Image")
@@ -220,7 +247,7 @@ def chat_section():
     if uploaded_file is not None:
         # Check if this is a new upload
         file_key = f"{st.session_state.current_user}_{st.session_state.current_contact}_{uploaded_file.name}"
-        if file_key not in st.session_state.uploaded_files:
+        if file_key not in st.session_state.get('uploaded_files', {}):
             # Process image
             image = Image.open(uploaded_file)
             buffered = io.BytesIO()
@@ -229,6 +256,7 @@ def chat_section():
             image_data = f"data:image/png;base64,{img_str}"
             
             # Add image message
+            db = load_database()
             new_message = {
                 "type": "image",
                 "sender": st.session_state.current_user,
@@ -237,16 +265,20 @@ def chat_section():
                 "time": datetime.datetime.now().strftime("%H:%M"),
                 "timestamp": datetime.datetime.now().isoformat()
             }
-            shared_data['messages'].append(new_message)
-            st.session_state.uploaded_files[file_key] = True
-            save_shared_data()
-            st.rerun()
+            db['messages'].append(new_message)
+            if save_database(db):
+                if 'uploaded_files' not in st.session_state:
+                    st.session_state.uploaded_files = {}
+                st.session_state.uploaded_files[file_key] = True
+                st.rerun()
+            else:
+                st.error("Failed to send image")
 
 def main():
-    st.title("💬 WhatsApp Clone - Fixed Version")
+    st.title("💬 WhatsApp Clone - Shared Database")
     
     # Initialize user session
-    initialize_user()
+    initialize_session()
     
     # Show login if not logged in
     if not st.session_state.current_user:
@@ -255,7 +287,7 @@ def main():
         return
     
     # Main app interface
-    shared_data = get_shared_data()
+    db = load_database()
     
     st.sidebar.success(f"Logged in as: **{st.session_state.current_user}**")
     
@@ -271,15 +303,15 @@ def main():
     with st.sidebar:
         st.markdown("---")
         st.header("ℹ️ App Info")
-        st.write(f"**Total Users:** {len(shared_data['users'])}")
-        st.write(f"**Your Contacts:** {len(shared_data['contacts'].get(st.session_state.current_user, []))}")
-        st.write(f"**Total Messages:** {len(shared_data['messages'])}")
+        st.write(f"**Total Users:** {len(db['users'])}")
+        st.write(f"**Your Contacts:** {len(db['contacts'].get(st.session_state.current_user, []))}")
+        st.write(f"**Total Messages:** {len(db['messages'])}")
         
-        # Show all registered users (for debugging)
+        # Show all registered users
         st.markdown("---")
         st.subheader("👤 All Registered Users")
-        if shared_data['users']:
-            for user in sorted(shared_data['users'].keys()):
+        if db['users']:
+            for user in sorted(db['users'].keys()):
                 status = "✅ You" if user == st.session_state.current_user else "👤"
                 st.write(f"{status} {user}")
         else:
