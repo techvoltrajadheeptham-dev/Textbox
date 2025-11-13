@@ -1,21 +1,94 @@
 # app.py
 import streamlit as st
 import datetime
-import base64
-import io
 import json
 import os
-from PIL import Image
+from datetime import timezone
 
-# Page configuration
+# Page configuration with better theme
 st.set_page_config(
     page_title="WhatsApp Clone",
     page_icon="💬",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # Database file path
 DB_FILE = "chat_database.json"
+
+# Custom CSS for better UI colors
+st.markdown("""
+<style>
+    .main {
+        background-color: #f0f2f6;
+    }
+    .sidebar .sidebar-content {
+        background: linear-gradient(180deg, #128C7E 0%, #075E54 100%);
+        color: white;
+    }
+    .stButton button {
+        background-color: #25D366;
+        color: white;
+        border: none;
+        border-radius: 20px;
+        padding: 10px 20px;
+        font-weight: bold;
+    }
+    .stButton button:hover {
+        background-color: #128C7E;
+        color: white;
+    }
+    .chat-header {
+        background-color: #075E54;
+        color: white;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+    }
+    .user-message {
+        background-color: #dcf8c6;
+        padding: 12px;
+        border-radius: 10px;
+        margin: 10px 0 10px 20%;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        border-bottom-right-radius: 5px;
+    }
+    .contact-message {
+        background-color: white;
+        padding: 12px;
+        border-radius: 10px;
+        margin: 10px 20% 10px 0;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        border-bottom-left-radius: 5px;
+    }
+    .message-sender {
+        font-weight: bold;
+        color: #128C7E;
+        margin-bottom: 5px;
+    }
+    .message-time {
+        font-size: 0.7rem;
+        color: #667781;
+        text-align: right;
+        margin-top: 5px;
+    }
+    .info-card {
+        background-color: white;
+        padding: 15px;
+        border-radius: 10px;
+        margin: 10px 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+</style>
+""", unsafe_allow_html=True)
+
+def get_current_time():
+    """Get current time in proper format"""
+    return datetime.datetime.now(timezone.utc).strftime("%I:%M %p")
+
+def get_current_date():
+    """Get current date"""
+    return datetime.datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 def load_database():
     """Load the shared database from file"""
@@ -48,16 +121,16 @@ def initialize_session():
     if 'current_user' not in st.session_state:
         st.session_state.current_user = None
         st.session_state.current_contact = None
-        st.session_state.uploaded_files = {}
 
 def login_section():
     """User login/registration"""
+    st.sidebar.markdown("<div class='info-card'>", unsafe_allow_html=True)
     st.sidebar.header("🔐 Login / Register")
     
     # Load current database
     db = load_database()
     
-    tab1, tab2 = st.sidebar.tabs(["Login", "Register"])
+    tab1, tab2 = st.sidebar.tabs(["🚪 Login", "📝 Register"])
     
     with tab1:
         username = st.text_input("Username", key="login_username").strip()
@@ -80,8 +153,8 @@ def login_section():
                 if new_username not in db['users']:
                     # Register new user
                     db['users'][new_username] = {
-                        "created_at": datetime.datetime.now().isoformat(),
-                        "last_login": datetime.datetime.now().isoformat()
+                        "created_at": get_current_date(),
+                        "last_login": get_current_date()
                     }
                     # Initialize contacts list for new user
                     db['contacts'][new_username] = []
@@ -89,7 +162,7 @@ def login_section():
                     # Save to database
                     if save_database(db):
                         st.session_state.current_user = new_username
-                        st.success(f"🎉 Welcome {new_username}! You can now add contacts.")
+                        st.success(f"🎉 Welcome {new_username}!")
                         st.rerun()
                     else:
                         st.error("Failed to save user registration.")
@@ -97,19 +170,21 @@ def login_section():
                     st.error("Username already exists!")
             else:
                 st.error("Please enter a username")
+    st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
 def contacts_section():
     """Manage contacts"""
+    st.sidebar.markdown("<div class='info-card'>", unsafe_allow_html=True)
     st.sidebar.header("👥 Contacts")
     
     current_user = st.session_state.current_user
     db = load_database()
     
     # Add contact section
-    st.sidebar.subheader("Add Contact")
+    st.sidebar.subheader("Add New Contact")
     new_contact = st.sidebar.text_input("Enter username:").strip()
     
-    if st.sidebar.button("Add Contact", use_container_width=True, type="primary"):
+    if st.sidebar.button("➕ Add Contact", use_container_width=True, type="primary"):
         if new_contact:
             if new_contact == current_user:
                 st.sidebar.error("❌ You cannot add yourself!")
@@ -118,14 +193,14 @@ def contacts_section():
                 if new_contact not in db['contacts'][current_user]:
                     db['contacts'][current_user].append(new_contact)
                     if save_database(db):
-                        st.sidebar.success(f"✅ Added {new_contact} to contacts!")
+                        st.sidebar.success(f"✅ Added {new_contact}!")
                         st.rerun()
                     else:
                         st.sidebar.error("❌ Failed to save contact.")
                 else:
                     st.sidebar.error("❌ Already in contacts!")
             else:
-                st.sidebar.error("❌ User not found! Tell them to register first.")
+                st.sidebar.error("❌ User not found!")
     
     st.sidebar.markdown("---")
     
@@ -144,58 +219,49 @@ def contacts_section():
             ):
                 st.session_state.current_contact = contact
                 st.rerun()
+    st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
 def display_message(message):
     """Display a chat message"""
     is_current_user = message["sender"] == st.session_state.current_user
     
     if message["type"] == "text":
-        st.markdown(f"""
-        <div style='
-            background-color: {"#dcf8c6" if is_current_user else "white"};
-            padding: 12px;
-            border-radius: 8px;
-            margin: 8px {"20% 0 0 0" if is_current_user else "0 20% 0 0"};
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        '>
-            <div style='font-weight: bold; color: #128c7e; margin-bottom: 4px;'>
-                {"You" if is_current_user else message["sender"]}
+        if is_current_user:
+            st.markdown(f"""
+            <div class='user-message'>
+                <div class='message-sender'>You</div>
+                <div>{message["content"]}</div>
+                <div class='message-time'>{message["time"]}</div>
             </div>
-            <div style='margin-bottom: 4px;'>{message["content"]}</div>
-            <div style='font-size: 0.8em; color: #667781; text-align: right;'>
-                {message["time"]}
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class='contact-message'>
+                <div class='message-sender'>{message["sender"]}</div>
+                <div>{message["content"]}</div>
+                <div class='message-time'>{message["time"]}</div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    elif message["type"] == "image":
-        st.markdown(f"""
-        <div style='
-            background-color: {"#dcf8c6" if is_current_user else "white"};
-            padding: 12px;
-            border-radius: 8px;
-            margin: 8px {"20% 0 0 0" if is_current_user else "0 20% 0 0"};
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        '>
-            <div style='font-weight: bold; color: #128c7e; margin-bottom: 4px;'>
-                {"You" if is_current_user else message["sender"]}
-            </div>
-            <img src="{message['content']}" style="max-width: 300px; border-radius: 6px; margin-bottom: 4px;">
-            <div style='font-size: 0.8em; color: #667781; text-align: right;'>
-                {message["time"]}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
 def chat_section():
     """Main chat interface"""
     if not st.session_state.current_contact:
-        st.info("👈 Select a contact from the sidebar to start chatting!")
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown("<div class='info-card' style='text-align: center;'>", unsafe_allow_html=True)
+            st.info("👈 Select a contact from the sidebar to start chatting!")
+            st.markdown("</div>", unsafe_allow_html=True)
         return
     
     db = load_database()
     
-    st.header(f"💬 Chat with {st.session_state.current_contact}")
+    # Chat header
+    st.markdown(f"""
+    <div class='chat-header'>
+        <h3>💬 Chat with {st.session_state.current_contact}</h3>
+        <p>Last seen: {get_current_time()}</p>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Display messages
     chat_container = st.container()
@@ -214,12 +280,14 @@ def chat_section():
             display_message(message)
         
         if not chat_messages:
-            st.info("No messages yet. Start the conversation!")
+            st.markdown("<div class='info-card' style='text-align: center;'>", unsafe_allow_html=True)
+            st.info("No messages yet. Start the conversation! 👇")
+            st.markdown("</div>", unsafe_allow_html=True)
     
     st.markdown("---")
     
-    # Text input
-    text_input = st.chat_input(f"Message {st.session_state.current_contact}...")
+    # Text input only (no image upload)
+    text_input = st.chat_input(f"💬 Type a message to {st.session_state.current_contact}...")
     if text_input:
         db = load_database()  # Reload to get latest messages
         new_message = {
@@ -227,55 +295,45 @@ def chat_section():
             "sender": st.session_state.current_user,
             "receiver": st.session_state.current_contact,
             "content": text_input,
-            "time": datetime.datetime.now().strftime("%H:%M"),
-            "timestamp": datetime.datetime.now().isoformat()
+            "time": get_current_time(),
+            "timestamp": get_current_date()
         }
         db['messages'].append(new_message)
         if save_database(db):
             st.rerun()
         else:
             st.error("Failed to send message")
+
+def info_section():
+    """App information section"""
+    st.sidebar.markdown("<div class='info-card'>", unsafe_allow_html=True)
+    st.sidebar.header("📊 App Info")
     
-    # Image upload
-    st.subheader("📷 Share Image")
-    uploaded_file = st.file_uploader(
-        "Choose an image",
-        type=['png', 'jpg', 'jpeg'],
-        key=f"upload_{st.session_state.current_contact}"
-    )
+    db = load_database()
     
-    if uploaded_file is not None:
-        # Check if this is a new upload
-        file_key = f"{st.session_state.current_user}_{st.session_state.current_contact}_{uploaded_file.name}"
-        if file_key not in st.session_state.get('uploaded_files', {}):
-            # Process image
-            image = Image.open(uploaded_file)
-            buffered = io.BytesIO()
-            image.save(buffered, format="PNG")
-            img_str = base64.b64encode(buffered.getvalue()).decode()
-            image_data = f"data:image/png;base64,{img_str}"
-            
-            # Add image message
-            db = load_database()
-            new_message = {
-                "type": "image",
-                "sender": st.session_state.current_user,
-                "receiver": st.session_state.current_contact,
-                "content": image_data,
-                "time": datetime.datetime.now().strftime("%H:%M"),
-                "timestamp": datetime.datetime.now().isoformat()
-            }
-            db['messages'].append(new_message)
-            if save_database(db):
-                if 'uploaded_files' not in st.session_state:
-                    st.session_state.uploaded_files = {}
-                st.session_state.uploaded_files[file_key] = True
-                st.rerun()
+    st.sidebar.write(f"**👤 Total Users:** {len(db['users'])}")
+    st.sidebar.write(f"**💬 Your Contacts:** {len(db['contacts'].get(st.session_state.current_user, []))}")
+    st.sidebar.write(f"**📨 Total Messages:** {len(db['messages'])}")
+    st.sidebar.write(f"**🕐 Current Time:** {get_current_time()}")
+    
+    # Show all registered users
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("👥 All Users")
+    if db['users']:
+        for user in sorted(db['users'].keys()):
+            if user == st.session_state.current_user:
+                st.sidebar.write(f"✅ **{user}** (You)")
             else:
-                st.error("Failed to send image")
+                st.sidebar.write(f"👤 {user}")
+    else:
+        st.sidebar.write("No users registered yet")
+    st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
 def main():
-    st.title("💬 WhatsApp Clone - Shared Database")
+    # App title with better styling
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("<h1 style='text-align: center; color: #075E54;'>💬 WhatsApp Web Clone</h1>", unsafe_allow_html=True)
     
     # Initialize user session
     initialize_session()
@@ -283,39 +341,24 @@ def main():
     # Show login if not logged in
     if not st.session_state.current_user:
         login_section()
+        st.markdown("<div class='info-card' style='text-align: center;'>", unsafe_allow_html=True)
         st.info("🔐 Please login or register to start chatting")
+        st.markdown("</div>", unsafe_allow_html=True)
         return
     
     # Main app interface
-    db = load_database()
-    
-    st.sidebar.success(f"Logged in as: **{st.session_state.current_user}**")
+    st.sidebar.markdown("<div class='info-card'>", unsafe_allow_html=True)
+    st.sidebar.success(f"**Logged in as:** {st.session_state.current_user}")
     
     if st.sidebar.button("🚪 Logout", use_container_width=True):
         st.session_state.current_user = None
         st.session_state.current_contact = None
         st.rerun()
+    st.sidebar.markdown("</div>", unsafe_allow_html=True)
     
     contacts_section()
+    info_section()
     chat_section()
-    
-    # Info panel
-    with st.sidebar:
-        st.markdown("---")
-        st.header("ℹ️ App Info")
-        st.write(f"**Total Users:** {len(db['users'])}")
-        st.write(f"**Your Contacts:** {len(db['contacts'].get(st.session_state.current_user, []))}")
-        st.write(f"**Total Messages:** {len(db['messages'])}")
-        
-        # Show all registered users
-        st.markdown("---")
-        st.subheader("👤 All Registered Users")
-        if db['users']:
-            for user in sorted(db['users'].keys()):
-                status = "✅ You" if user == st.session_state.current_user else "👤"
-                st.write(f"{status} {user}")
-        else:
-            st.write("No users registered yet")
 
 if __name__ == "__main__":
     main()
